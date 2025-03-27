@@ -40,7 +40,7 @@ npm install moment
 
 ## Скрины
 
-<p float="center">
+<p float="left">
   <img src="./assets/Главная страница.png" width="200" />
   <img src="./assets/Главная страница с задачей.png" width="200" />
   <img src="./assets/Добавление задач.png" width="200" />
