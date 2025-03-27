@@ -91,7 +91,7 @@ export default function Home() {
         todos.length > 0 ?
         <View style={styles.container}>
             <Image
-                source={require('../assets/Liana.jpg')}
+                source={require('../assets/cat.jpg')}
                 style={styles.pic}
             />
             <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
@@ -127,7 +127,7 @@ export default function Home() {
         </View>
         : <View style={styles.container}>
             <Image
-                source={require('../assets/Liana.jpg')}
+                source={require('../assets/cat.jpg')}
                 style={styles.pic}
             />
             <View style={{justifyContent: 'center', alignItems: 'center', flex: 1}}>
