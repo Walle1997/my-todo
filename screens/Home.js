@@ -1,93 +1,162 @@
-import * as React from "react";
-import { StyleSheet, View, Image, Text, TouchableOpacity } from 'react-native';
-import TodoList from '../components/TodoList';
-import { todosData } from "../data/todos";
-import { useNavigation } from "@react-navigation/native";
+import React, {useEffect, useState} from 'react';
+import { StyleSheet, Text, View, Image, TouchableOpacity, Platform, StatusBar } from 'react-native';
+import { useSelector, useDispatch} from 'react-redux';
+import { hideComplitedReducer, setTodosReducer } from '../redux/todosSlice';
+import ListTodos from '../components/ListTodos';
+import { useGetTodos } from '../hooks/useGetTodos';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Notifications from 'expo-notifications';
+import { useNavigation } from '@react-navigation/native';
+import * as Device from 'expo-device';
+import moment from 'moment';
 
+Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+    }),
+})
 
 export default function Home() {
-    const [localdata, setLocalData] = React.useState(
-        todosData.sort((a, b) => {return a.isCompleted - b.isCompleted})
-    );
-    const [isHidden, setIsHidden] = React.useState(false);
+
+    useGetTodos();
+    const todos = useSelector(state => state.todos.todos);
+    const [isHidden, setIsHidden] = useState(false);
+    const dispatch = useDispatch();
+    const [expoPushToken, setExpoPushToken] = useState('');
     const navigation = useNavigation();
 
-    const handleHidePress = () => {
+    useEffect(() => {
+        registerForPushNotificationsAsync().then(token => setExpoPushToken(token));
+        checkFirstLaunch();
+    }, []);
+
+    const checkFirstLaunch = async () => {
+        const firstLaunch = await AsyncStorage.getItem('@FirstLaunch');
+        if (firstLaunch) {
+            return;
+        }
+        await AsyncStorage.setItem('@FirstLaunch', 'true');
+        navigation.navigate('Onboarding');
+    }
+
+    const handleHideCompleted = async () => {
         if (isHidden) {
             setIsHidden(false);
-            setLocalData(todosData.sort((a, b) => {return a.isCompleted - b.isCompleted}));
+            const todos = await AsyncStorage.getItem('Todos');
+            if(todos !== null){
+                dispatch(setTodosReducer(JSON.parse(todos)));
+            }
+
             return;
         }
         setIsHidden(!isHidden);
-        setLocalData(localdata.filter(todo => !todo.isCompleted));
+        dispatch(hideComplitedReducer());
     }
 
-  return (
-    <View style={styles.container}>
-        <Image
-        source={require('../assets/Liana.jpg')}
-        style={styles.pic}
-    />
-    <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
-        <Text style={styles.title}>Сегодня</Text>
-        <TouchableOpacity onPress={handleHidePress}>
-          <Text style={{color: '#3478f6'}}>{isHidden ? 'Показать завершенные' : 'Скрыть завершенные'}</Text>
-        </TouchableOpacity>
-    </View>
+    const registerForPushNotificationsAsync = async () => {
+        let token;
+        if (Device.isDevice) {
+          const { status: existingStatus } = await Notifications.getPermissionsAsync();
+          let finalStatus = existingStatus;
+          if (existingStatus !== 'granted') {
+            const { status } = await Notifications.requestPermissionsAsync();
+            finalStatus = status;
+          }
+          if (finalStatus !== 'granted') {
+            alert('Failed to get push token for push notification!');
+            return;
+          }
+          token = (await Notifications.getExpoPushTokenAsync()).data;
+          console.log(token);
+        } else {
+            return;
+        }
+        if (Platform.OS === 'android') {
+          Notifications.setNotificationChannelAsync('default', {
+            name: 'default',
+            importance: Notifications.AndroidImportance.MAX,
+            vibrationPattern: [0, 250, 250, 250],
+            lightColor: '#FF231F7C',
+          });
+        }
+        return token;
+    }
 
-    <TodoList todosData={localdata.filter(todo => todo.isToday)} />
+    const todayTodos = todos.filter(todo => moment(todo.hour).isSame(moment(), 'day'));
+    const tomorrowTodos = todos.filter(todo => moment(todo.hour).isAfter(moment(), 'day')); 
 
-    <Text style={styles.title}>Завтра</Text>
-    <TodoList todosData={todosData.filter(todo => !todo.isToday)} />
-
-    <TouchableOpacity onPress={() => navigation.navigate("Добавить задачу")} style={styles.button}>
-        <Text style={styles.plus}>+</Text>
-    </TouchableOpacity>
-
-    </View>
-  );
+    return (
+        todos.length > 0 ?
+        <View style={styles.container}>
+            <Image
+                source={require('../assets/Liana.jpg')}
+                style={styles.pic}
+            />
+            <View style={{flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'}}>
+                <Text style={styles.title}>Сегодня</Text>
+                <TouchableOpacity onPress={handleHideCompleted}>
+                    <Text style={{color:'#3478F6'}}>{isHidden ? "Показать завершенные " : "Скрыть завершенные"}</Text>
+                </TouchableOpacity>
+            </View>
+            { todayTodos.length > 0  
+              ? <ListTodos todosData={todayTodos} />
+              : <View style={{flex: 1, justifyContent: 'center', alignItems: 'center', marginBottom: 20}}>
+                  <Image
+                    source={require('../assets/nothingTomorrow.png')}
+                    style={{width: 150, height: 150, marginBottom: 20, resizeMode: 'contain'}}
+                  />
+                  <Text style={{fontSize: 13, color: '#000', fontWeight: 'bold'}}>ПОЗДРАВЛЯЮ!</Text>
+                  <Text style={{fontSize: 13, color: '#737373', fontWeight: '500'}}>На сегодня у тебя ничего не запланировано, наслаждайся этим днем.</Text>
+                </View>
+            }
+            <Text style={styles.title}>Завтра</Text>
+            { tomorrowTodos.length > 0  
+              ? <ListTodos todosData={tomorrowTodos} />
+              : <View style={{flex: 1, justifyContent: 'center', alignItems: 'center', marginBottom: 20}}>
+                  <Image
+                    source={require('../assets/nothingToday.png')}
+                    style={{width: 150, height: 150, marginBottom: 20, resizeMode: 'contain'}}
+                  />
+                  <Text style={{fontSize: 13, color: '#000', fontWeight: 'bold'}}>Круто!</Text>
+                  <Text style={{fontSize: 13, color: '#737373', fontWeight: '500'}}>Ничего не запланировано на завтра...</Text>
+                </View>
+            }
+            <StatusBar style='auto' />
+        </View>
+        : <View style={styles.container}>
+            <Image
+                source={require('../assets/Liana.jpg')}
+                style={styles.pic}
+            />
+            <View style={{justifyContent: 'center', alignItems: 'center', flex: 1}}>
+                <Image
+                    source={require('../assets/nothing.png')}
+                    style={{width: 200, height: 200, marginBottom: 20, resizeMode: 'contain'}}
+                />
+                <Text style={{fontSize: 13, color: '#000', fontWeight: 'bold'}}>Круто</Text>
+                <Text style={{fontSize: 13, color: '#737373', fontWeight: '500'}}>Ничего не запланировано.</Text> 
+            </View>
+        </View>
+    )
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    paddingHorizontal: 15,
-    paddingTop: 70,
-  },
-  pic: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignSelf: 'flex-end',
-  },
-  title: {
-    fontSize: 34,
-    fontWeight: 'bold',
-    marginBottom: 35,
-    marginTop:10,
-  },
-  button: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: '#000',
-    position: 'absolute',
-    bottom: 50,
-    right: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-        width: 0,
-        height: 2,
+    title: {
+        fontSize: 34,
+        fontWeight: 'bold',
+        marginBottom: 35,
+        marginTop: 10,
     },
-    shadowOpacity: .5,
-    shadowRadius: 5,
-    elevation: 5,
-  },
-  plus: {
-    fontSize: 40,
-    color: '#fff',
-    position: 'absolute',
-    top: -6,
-    left: 9,
-  }
+    pic: {
+        width: 42,
+        height: 42,
+        borderRadius: 21,
+        alignSelf: 'flex-end'
+    },
+    container: {
+        flex: 1,
+        paddingHorizontal: 15
+    },
 });

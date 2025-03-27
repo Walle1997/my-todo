@@ -16,7 +16,7 @@ const todosData = [
     {
         id: 3,
         text: 'Прогулка с мужем',
-        isCompleted: false,
+        isCompleted: true,
         isToday: true,
         hour: '15:00',
     },
